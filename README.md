@@ -11,6 +11,9 @@ This is a Chrome extension that operates as a standalone **SSH Agent**. It integ
 
 - **Expose Standalone SSH Agent**: Implements the SSH Agent protocol natively in Javascript and exposes it to Chrome Secure Shell via `externally_connectable` port connections.
 - **Keymaster Integration**: Supports standard credentials login and conditionally prompts for TOTP (multi-factor authentication) code when requested by the server.
+- **Webauth for CLI Integration**: Automatically probes the Keymaster server's capabilities on URL input. If the server supports browser-based authentication (`AuthTypeWebauthForCLI`), it replaces the password form with a "Launch Browser Login" interface, monitors the browser's cookie jar via `chrome.cookies.onChanged`, and fetches certificates seamlessly as soon as the browser session is authenticated.
+  > [!IMPORTANT]
+  > **Browser Login Limitation**: When utilizing the browser-based login flow (`WebauthForCLI`), you must log in using an authentication backend that permits certificate generation (such as standard username/password with U2F or TOTP). Federated logins (e.g., OAuth2/OIDC/Okta SSO) do not grant the required authentication levels to issue certificates, resulting in a `401 Unauthorized Not enough auth level for getting certs` error.
 - **U2F & WebAuthn (Security Keys) Support**: Fully supports hardware keys (e.g. YubiKeys) by fetching the assertion challenge from `/webauthn/AuthBegin/`, invoking the browser's native security key prompt using `navigator.credentials.get()`, and submitting the signed assertion to `/webauthn/AuthFinish/`.
 - **Hybrid MFA Switch**: If the server permits both security keys (U2F) and authenticator codes (TOTP), the popup provides buttons to toggle between the verification screens seamlessly.
 - **Local Key Generation**: Uses the browser's native **Web Crypto API** to generate secure Ed25519 key pairs locally (private keys never leave the extension).

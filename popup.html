@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Keymaster SSH Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="logo-container">
+        <div class="logo-glow"></div>
+        <!-- Shield + Key Icon -->
+        <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <circle cx="12" cy="10" r="3"/>
+          <path d="M12 13v4h2"/>
+        </svg>
+      </div>
+      <h1>Keymaster SSH Agent</h1>
+    </header>
+
+    <main>
+      <!-- 1. Loading Screen -->
+      <div id="loading-screen" class="screen active">
+        <div class="loading-screen">
+          <div class="spinner"></div>
+        </div>
+      </div>
+
+      <!-- 2. Connection / Login Screen -->
+      <div id="login-screen" class="screen">
+        <!-- Error Alert -->
+        <div id="status-msg" class="status-msg error">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span id="status-text">An error occurred</span>
+        </div>
+
+        <form id="login-form">
+          <!-- Server URL -->
+          <div class="form-group">
+            <label for="server-input">Keymaster Server</label>
+            <div class="input-container">
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                  <line x1="6" y1="6" x2="6.01" y2="6"/>
+                  <line x1="6" y1="18" x2="6.01" y2="18"/>
+                </svg>
+              </span>
+              <input type="url" id="server-input" placeholder="https://keymaster.example.com" required>
+            </div>
+          </div>
+
+          <!-- Username -->
+          <div class="form-group">
+            <label for="username-input">Username</label>
+            <div class="input-container">
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+              </span>
+              <input type="text" id="username-input" placeholder="e.g. username" required>
+            </div>
+          </div>
+
+          <!-- Password / MFA inputs -->
+          <div id="credentials-container">
+            <div class="form-group">
+              <label for="password-input">Password</label>
+              <div class="input-container">
+                <span class="input-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                </span>
+                <input type="password" id="password-input" placeholder="••••••••" required>
+                <button type="button" id="toggle-password-btn" class="toggle-password">
+                  <!-- Eye Icon -->
+                  <svg id="eye-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <!-- U2F Toggle Switch -->
+            <div class="form-group" style="margin-top: 14px;">
+              <label class="switch-label">
+                <span style="text-transform: none; font-size: 13px; color: var(--text-secondary); font-weight: 500; letter-spacing: normal;">Enable Security Keys (U2F)</span>
+                <div class="switch-wrapper">
+                  <input type="checkbox" id="u2f-toggle" checked>
+                  <div class="switch-slider"></div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- MFA TOTP input (conditionally displayed) -->
+          <div id="mfa-container" style="display: none;">
+            <div class="form-group">
+              <label for="otp-input">MFA Security Code (TOTP)</label>
+              <div class="input-container">
+                <span class="input-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </span>
+                <input type="text" id="otp-input" placeholder="e.g. 123456" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+              </div>
+            </div>
+            <button type="button" id="switch-to-u2f-btn" class="btn btn-secondary" style="margin-top: 8px; width: auto; font-size: 12px; padding: 6px 12px; display: none;">
+              Use Security Key
+            </button>
+          </div>
+
+          <!-- U2F Prompt (conditionally displayed) -->
+          <div id="u2f-container" style="display: none; text-align: center; padding: 12px 0;">
+            <div class="u2f-pulse-icon">
+              <div class="u2f-ring"></div>
+              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="position: relative; z-index: 2;">
+                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+              </svg>
+            </div>
+            <p style="margin-top: 14px; font-size: 13px; color: var(--text-secondary);">
+              Please tap your hardware security key.
+            </p>
+            <p style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+              Waiting for browser prompt...
+            </p>
+            <button type="button" id="switch-to-totp-btn" class="btn btn-secondary" style="margin-top: 16px; width: auto; font-size: 12px; padding: 6px 12px; display: none;">
+              Use Authenticator Code
+            </button>
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" id="login-btn" class="btn btn-primary" style="margin-top: 8px;">
+            <span>Connect & Authenticate</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+
+      <!-- 3. Dashboard / Countdown Screen -->
+      <div id="dashboard-screen" class="screen">
+        <!-- Circular countdown -->
+        <div class="countdown-box">
+          <svg class="countdown-svg" viewBox="0 0 160 160">
+            <!-- Define Gradient -->
+            <defs>
+              <linearGradient id="progressGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#4f46e5" />
+                <stop offset="100%" stop-color="#06b6d4" />
+              </linearGradient>
+            </defs>
+            <circle class="circle-bg" cx="80" cy="80" r="76"></circle>
+            <circle id="countdown-progress-ring" class="circle-progress" cx="80" cy="80" r="76"></circle>
+          </svg>
+          
+          <div class="countdown-text">
+            <div id="expired-icon" class="expired-icon">x</div>
+            <div id="time-display" class="time-val">00h</div>
+            <div id="time-label" class="time-label">Time Remaining</div>
+          </div>
+        </div>
+
+        <!-- Connection Details metadata -->
+        <div class="meta-card">
+          <div class="meta-row">
+            <span class="meta-key">Server</span>
+            <span id="meta-server" class="meta-val server-val">https://keymaster...</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">Username</span>
+            <span id="meta-username" class="meta-val">username</span>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="dashboard-actions">
+          <button id="renew-btn" class="btn btn-primary">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span>Renew Certificate</span>
+          </button>
+          
+          <button id="logout-btn" class="btn btn-danger-outline">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            <span>Disconnect</span>
+          </button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

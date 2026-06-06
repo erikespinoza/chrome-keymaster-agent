@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Keymaster SSH Agent",
+  "version": "1.0.0",
+  "description": "Chrome SSH Agent for Keymaster short-lived certificates, with real-time countdown.",
+  "icons": {
+    "16": "img/icon16.png",
+    "48": "img/icon48.png",
+    "128": "img/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Keymaster SSH Agent",
+    "default_icon": {
+      "16": "img/icon16.png",
+      "48": "img/icon48.png",
+      "128": "img/icon128.png"
+    }
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "cookies",
+    "notifications",
+    "declarativeNetRequest"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "externally_connectable": {
+    "ids": [
+      "pnhechapfaindjhompbnflcldabbghjo",
+      "okddffdblfhhnmhodogpojmfkjmhinfp",
+      "iodihamcpbpeioajjeobimgagajmlibd",
+      "algkcnfjnajfhgimadimbjhmpaeohhln",
+      "ooiklbnjmhbcgemelgfhaeaocllobloj",
+      "hmgggebkhjjkiimkjlknpdgapncghehh"
+    ],
+    "matches": [
+      "chrome-untrusted://terminal/*"
+    ]
+  }
+}

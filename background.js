@@ -476,6 +476,58 @@ async function requestCertificate(server, username) {
   }
 }
 
+// --- Webauth Monitoring and Cookie Listener ---
+
+let activeWebauthRequest = null;
+
+chrome.cookies.onChanged.addListener(async (changeInfo) => {
+  if (changeInfo.cookie.name === "auth_cookie") {
+    console.log("Webauth: Cookie onChanged event fired for", changeInfo.cookie.domain, "removed:", changeInfo.removed);
+    
+    if (activeWebauthRequest && !changeInfo.removed) {
+      const { server, username, tabId, sendResponse } = activeWebauthRequest;
+      
+      try {
+        const serverUrl = new URL(server);
+        const cookieDomain = changeInfo.cookie.domain.startsWith('.') ? changeInfo.cookie.domain.slice(1) : changeInfo.cookie.domain;
+        const serverHost = serverUrl.hostname;
+        
+        console.log("Webauth: Comparing cookie domain:", cookieDomain, "with server host:", serverHost);
+        
+        if (serverHost === cookieDomain || serverHost.endsWith('.' + cookieDomain) || cookieDomain.endsWith('.' + serverHost)) {
+          console.log("Webauth: Detected match, requesting certificate...");
+          
+          // Clear active request to prevent multiple requests
+          activeWebauthRequest = null;
+          
+          // Automatically close the Keymaster login tab
+          if (tabId) {
+            try {
+              chrome.tabs.remove(tabId);
+            } catch (tabErr) {
+              console.warn("Failed to close Keymaster login tab:", tabErr);
+            }
+          }
+          
+          // Fetch certificate
+          const certResult = await requestCertificate(server, username);
+          if (sendResponse) {
+            sendResponse({ success: true, validBefore: certResult.validBefore });
+          }
+        }
+      } catch (err) {
+        console.error("Webauth cookie handler error:", err);
+        if (activeWebauthRequest && activeWebauthRequest.sendResponse === sendResponse) {
+          activeWebauthRequest = null;
+          if (sendResponse) {
+            sendResponse({ success: false, error: err.message });
+          }
+        }
+      }
+    }
+  }
+});
+
 // --- Popup Message Listener ---
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -493,6 +545,74 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         certText: data.certText || ""
       });
     });
+    return true; // Keep response channel open
+  }
+  
+  if (request.type === "PROBE_WEBAUTH") {
+    const { server } = request;
+    (async () => {
+      try {
+        const probeURL = `${server}/showAuthToken`;
+        // Bypass credentials and send a simple HEAD request to check if /showAuthToken exists
+        const response = await fetchWithTimeout(probeURL, { method: "HEAD", credentials: "omit" });
+        // Status 404 means endpoint not found/supported. Any other status (like 200, 302, 401, 403) means supported.
+        sendResponse({ supported: response.status !== 404 });
+      } catch (err) {
+        console.warn("Webauth support probe failed:", err);
+        sendResponse({ supported: false });
+      }
+    })();
+    return true; // Keep response channel open
+  }
+
+  if (request.type === "START_WEBAUTH") {
+    const { server, username } = request;
+    
+    (async () => {
+      try {
+        // 1. Check if a valid auth_cookie already exists in the cookie jar
+        console.log("Webauth: Checking for existing auth_cookie for", server);
+        const existingCookie = await chrome.cookies.get({ url: server, name: "auth_cookie" });
+        if (existingCookie && existingCookie.value) {
+          console.log("Webauth: Found existing auth_cookie, checking validity...");
+          try {
+            const certResult = await requestCertificate(server, username);
+            console.log("Webauth: Existing cookie is valid, cert generated successfully!");
+            sendResponse({ success: true, validBefore: certResult.validBefore });
+            return;
+          } catch (certErr) {
+            console.warn("Webauth: Existing cookie cert request failed (might be expired):", certErr);
+            // If it failed, the existing cookie is likely expired/invalid, so we proceed to open the login tab
+          }
+        }
+        
+        // 2. Open the browser web authentication page in a new tab
+        const url = `${server}/showAuthToken?user=${username}`;
+        console.log("Webauth: Launching browser login at", url);
+        
+        chrome.tabs.create({ url }, (tab) => {
+          activeWebauthRequest = {
+            server,
+            username,
+            tabId: tab.id,
+            sendResponse
+          };
+          
+          // Auto-timeout after 2 minutes
+          setTimeout(() => {
+            if (activeWebauthRequest && activeWebauthRequest.sendResponse === sendResponse) {
+              activeWebauthRequest = null;
+              try {
+                sendResponse({ success: false, error: "Authentication timed out after 2 minutes." });
+              } catch (e) {}
+            }
+          }, 120000);
+        });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    
     return true; // Keep response channel open
   }
   

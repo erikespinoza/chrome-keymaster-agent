@@ -24,6 +24,11 @@ const u2fContainer = document.getElementById("u2f-container");
 const switchToTotpBtn = document.getElementById("switch-to-totp-btn");
 const u2fToggle = document.getElementById("u2f-toggle");
 
+// Webauth elements
+const webauthContainer = document.getElementById("webauth-container");
+const webauthLaunchBtn = document.getElementById("webauth-launch-btn");
+const webauthWaiting = document.getElementById("webauth-waiting");
+
 // General login controls
 const loginBtn = document.getElementById("login-btn");
 const loginBtnText = loginBtn.querySelector("span");
@@ -162,6 +167,39 @@ function startCountdown(validBeforeSec) {
 
 // --- Initialize / Get Status ---
 
+let isWebauthSupported = false;
+let probeTimeout = null;
+
+function probeWebauthSupport(server) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "PROBE_WEBAUTH", server }, (response) => {
+      resolve(!!response && response.supported);
+    });
+  });
+}
+
+async function checkServerCapabilities() {
+  const server = serverInput.value.trim().replace(/\/$/, "");
+  if (!server) {
+    webauthContainer.style.display = "none";
+    credentialsContainer.style.display = "block";
+    loginBtn.style.display = "inline-flex";
+    return;
+  }
+  
+  isWebauthSupported = await probeWebauthSupport(server);
+  
+  if (isWebauthSupported) {
+    webauthContainer.style.display = "block";
+    credentialsContainer.style.display = "none";
+    loginBtn.style.display = "none";
+  } else {
+    webauthContainer.style.display = "none";
+    credentialsContainer.style.display = "block";
+    loginBtn.style.display = "inline-flex";
+  }
+}
+
 function init() {
   showScreen(loadingScreen);
   
@@ -174,6 +212,12 @@ function init() {
     chrome.storage.local.set({ u2fEnabled: u2fToggle.checked });
   });
 
+  serverInput.addEventListener("blur", checkServerCapabilities);
+  serverInput.addEventListener("input", () => {
+    if (probeTimeout) clearTimeout(probeTimeout);
+    probeTimeout = setTimeout(checkServerCapabilities, 500);
+  });
+
   chrome.runtime.sendMessage({ type: "GET_STATUS" }, (response) => {
     if (response && response.authenticated) {
       metaServer.textContent = response.server;
@@ -184,10 +228,12 @@ function init() {
       if (response && (response.server || response.username)) {
         serverInput.value = response.server || "";
         usernameInput.value = response.username || "";
+        checkServerCapabilities();
       } else {
         chrome.storage.local.get(['server', 'username']).then((data) => {
           serverInput.value = data.server || "";
           usernameInput.value = data.username || "";
+          checkServerCapabilities();
         });
       }
       resetFormToLoginState();
@@ -209,6 +255,10 @@ function resetFormToLoginState() {
   loginBtn.disabled = false;
   showError(null);
   u2fAborted = false;
+  
+  webauthWaiting.style.display = "none";
+  webauthLaunchBtn.disabled = false;
+  checkServerCapabilities();
 }
 
 function setToMfaState() {
@@ -519,6 +569,43 @@ logoutBtn.addEventListener("click", () => {
       resetFormToLoginState();
       showScreen(loginScreen);
     });
+  });
+});
+
+// --- Webauth Actions ---
+
+webauthLaunchBtn.addEventListener("click", () => {
+  showError(null);
+  const server = serverInput.value.trim().replace(/\/$/, "");
+  const username = usernameInput.value.trim();
+  
+  if (!username) {
+    showError("Please enter your Username first.");
+    return;
+  }
+  
+  // Save credentials immediately
+  chrome.storage.local.set({ server, username });
+  
+  webauthLaunchBtn.disabled = true;
+  webauthWaiting.style.display = "block";
+  
+  chrome.runtime.sendMessage({
+    type: "START_WEBAUTH",
+    server,
+    username
+  }, (response) => {
+    webauthLaunchBtn.disabled = false;
+    webauthWaiting.style.display = "none";
+    
+    if (response && response.success) {
+      metaServer.textContent = server;
+      metaUsername.textContent = username;
+      startCountdown(response.validBefore);
+      showScreen(dashboardScreen);
+    } else {
+      showError(response ? response.error : "Authentication failed or timed out.");
+    }
   });
 });
 
